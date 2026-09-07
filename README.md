@@ -4,8 +4,8 @@ Système de pointage par badge NFC (Raspberry Pi) — projet en binôme.
 
 ## Équipe
 
-- Zinab Outmani
-- *(binôme à compléter)*
+- Zinab OUTMANI 
+- Quentin BOSSUS
 
 ## Objectif
 
