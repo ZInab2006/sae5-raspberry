@@ -99,8 +99,10 @@
 # Annexes
 
 ## Schéma Architecture utilises
-![Schema Architecture](img/Schema_Architecture.png)
+![Schema_Architecture](img/Schema_Architecture.png)
 
-## Schema de câblage Raspberry <-> lecteur RFID
+## Schéma de câblage Raspberry <-> lecteur RFID
 ![Raspberry_circuit](img/Raspberry_circuit.png)
 
+## MCD des bases de données PostgreSQL et SQLite
+![MCD_BDD](img/MCD_BDD.png)
