@@ -22,6 +22,9 @@
 | **Raspberry Pi** | Ordinateur qui exécute le programme Python et gère le lecteur RFID ainsi que le stockage des données. |
 | **Lecteur RFID RC522** | Permet de lire l'identifiant du badge RFID présenté par l'étudiant. |
 | **7 câbles** | Permettent de relier le lecteur RFID RC522 au Raspberry Pi. |
+| **3 câbles** | Relier le Raspberry Pi à la LED en passant par la résistance. |
+| **Résistance de 330 ohm** | Limiter le courant traversant la LED afin de la protéger et d'éviter de l'endommager. |
+| **LED** | Assure une vérification visuelle du fonctionnement |
 
 
 ### Organisation du logiciel exécuté sur le Raspberry Pi
