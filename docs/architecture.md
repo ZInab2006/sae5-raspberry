@@ -111,31 +111,33 @@ Interface simple pour :
 
 | Entité | Contenu principal | Contrainte sujet |
 |--------|-------------------|------------------|
-| Étudiant | id, nom, prénom, groupe | — |
-| Groupe | nom | ≤ 16 caractères, non codé en dur |
-| Carte NFC | uid → étudiant | uid ≤ 64 caractères |
-| Enseignement | code | ≤ 32 caractères |
-| Salle | nom | ≤ 32 caractères |
-| Dispositif | device_id, nom | un Pi = un device_id |
-| Pointage | uuid, uid, étudiant, groupe, enseignement, salle, horodatage, device_id | événement unique |
-
+| Étudiant | `num_etu`, nom, prénom, groupe, `uid_nfc` | `uid_nfc` ≤ 64 caractères |
+| Séance | `id_seance`, `id_ens`, groupe, salle, date, heure_debut, heure_fin | créneau d’emploi du temps |
+| Enseignement | `id_ens` / code | ≤ 32 caractères (ex. `R1.01`) |
+| Salle | `num_salle` | ≤ 32 caractères |
+| Dispositif | `device_id`, nom | un Pi = un `device_id` |
+| Pointage | `id_pointage`, `num_etu`, `id_seance`, date, heure | événement unique (UUID) |
+> L’emploi du temps est modélisé par l’entité **Séance** : une matière (`R1.01`) peut correspondre à plusieurs séances (dates/horaires différents).
 ### 4.2 Schéma relationnel (simplifié)
-
 ```text
-GROUPE 1 ─── N ETUDIANT 1 ─── 0..1 CARTE_NFC
-ETUDIANT 1 ─── N POINTAGE
-ENSEIGNEMENT 1 ─── N POINTAGE
+ETUDIANT 1 ─── N POINTAGE N ─── 1 SEANCE
+SEANCE N ─── 1 ENSEIGNEMENT
+SEANCE N ─── 1 SALLE
 DISPOSITIF 1 ─── N POINTAGE
-```
+Associations principales :
 
-### 4.3 Stockage local (Raspberry Pi — SQLite)
+Effectue : Étudiant (0,n) — Pointage (1,1)
+Contient : Séance (0,n) — Pointage (1,1)
+Chaque pointage est rattaché à une séance, ce qui permet de savoir le groupe, l’enseignement, la salle et le créneau, puis de calculer les absences.
 
-- table `pointages` avec champ `synced` (0/1) ;
-- table `etudiants_cache` (copie partielle pour identifier hors ligne) ;
-- configuration de séance courante (groupe, enseignement, salle).
+4.3 Stockage local (Raspberry Pi — SQLite)
+Tables locales (“MCD lite”) :
 
-Chaque pointage local possède un **UUID** généré sur le Pi. Cet UUID sert d’identifiant unique côté serveur pour éviter les doublons à la synchronisation.
-
+Etudiants_cache : copie pour identifier un badge hors ligne (num_etu, nom, prénom, groupe, uid_nfc)
+seances_cache : séances téléchargées (id_seance, id_ens, groupe, salle, date, horaires)
+pointage_Locale : file d’attente des pointages (id_pointage, num_etu, id_seance, date, heure, synchronise)
+Chaque pointage local possède un UUID (id_pointage) généré sur le Pi.
+Cet identifiant sert côté serveur à éviter les doublons à la synchronisation.
 ---
 
 ## 5. Communications
