@@ -117,18 +117,16 @@ Interface simple pour :
 | Salle | `num_salle` | ≤ 32 caractères |
 | Dispositif | `device_id`, nom | un Pi = un `device_id` |
 | Pointage | `id_pointage`, `num_etu`, `id_seance`, date, heure | événement unique (UUID) |
+
 > L’emploi du temps est modélisé par l’entité **Séance** : une matière (`R1.01`) peut correspondre à plusieurs séances (dates/horaires différents).
+
 ### 4.2 Schéma relationnel (simplifié)
+
 ```text
 ETUDIANT 1 ─── N POINTAGE N ─── 1 SEANCE
 SEANCE N ─── 1 ENSEIGNEMENT
 SEANCE N ─── 1 SALLE
 DISPOSITIF 1 ─── N POINTAGE
-Associations principales :
-
-Effectue : Étudiant (0,n) — Pointage (1,1)
-Contient : Séance (0,n) — Pointage (1,1)
-Chaque pointage est rattaché à une séance, ce qui permet de savoir le groupe, l’enseignement, la salle et le créneau, puis de calculer les absences.
 
 4.3 Stockage local (Raspberry Pi — SQLite)
 Tables locales (“MCD lite”) :
