@@ -1,8 +1,3 @@
-<!-- TO DO 
-- changer le nom des img
-- changer les images pour les rendre + pro
-- Améliorer le rendu
-- Vérif sur git -->
 -- --
 
 <table>
