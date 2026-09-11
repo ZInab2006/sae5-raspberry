@@ -1,272 +1,106 @@
-# Architecture — SAE5.B.01 Pointage NFC
+<!-- TO DO 
+- changer le nom des img
+- changer les images pour les rendre + pro
+- Améliorer le rendu
+- Vérif sur git -->
+-- --
 
-**Projet :** Automatisation de l’appel des étudiants  
-**Repo :** [sae5-raspberry](https://github.com/ZInab2006/sae5-raspberry)  
-**Phase :** Partie 1 — réflexion et modélisation (avant implémentation)
+<table>
+  <tr>
+    <td align="left">
+      <img src="img/iut_logo.png" width="200">
+    </td>
+    <td align="center">
+      <h1>Document d'architecture</h1>
+    </td>
+    <td></td>
+  </tr>
+</table>
 
----
+-- --
 
-## 1. Contexte et objectifs
 
-L’IUT souhaite automatiser l’appel en cours grâce aux cartes étudiantes et à un lecteur NFC.
+### Différents composants et leur rôle
 
-Le système doit permettre de savoir **qui** a été présent, dans **quel groupe**, pour **quel enseignement**, dans **quelle salle**, à **quelle date et heure**.
+| Composant | Rôle |
+|:---|:---|
+| **Raspberry Pi** | Ordinateur qui exécute le programme Python et gère le lecteur RFID ainsi que le stockage des données. |
+| **Lecteur RFID RC522** | Permet de lire l'identifiant du badge RFID présenté par l'étudiant. |
+| **7 câbles** | Permettent de relier le lecteur RFID RC522 au Raspberry Pi. |
 
-Contraintes principales prises en compte :
 
-- plusieurs dispositifs utilisés en parallèle (cours simultanés) ;
-- portabilité du dispositif (Raspberry Pi) ;
-- fonctionnement possible **sans connexion réseau** ;
-- centralisation des données sur un serveur ;
-- démarrage et pointage rapides ;
-- simplicité de gestion (étudiants, groupes, consultation).
+### Organisation du logiciel exécuté sur le Raspberry Pi
 
----
+| Élément | Fonction |
+|:---|:---|
+| **Base de données SQLite** | Stockage local des données sur le Raspberry Pi. |
+| **Programme Python** | Lecture du badge RFID, enregistrement des données et synchronisation avec le serveur central. |
+| **Communication avec le serveur central** | Envoi des données de SQLite vers PostgreSQL. |
 
-## 2. Vue d’ensemble
 
-Le système est découpé en **trois blocs** :
+### Organisation de la base de données
 
-| Bloc | Composant | Rôle |
-|------|-----------|------|
-| A | Dispositif de pointage (Raspberry Pi) | Lit le badge, enregistre en local, donne un feedback |
-| B | Serveur central + base de données | Centralise les données, reçoit la synchronisation |
-| C | Interface web | Gère étudiants/groupes et consulte les pointages |
+| Base de données | Fonction |
+|:---|:---|
+| **SQLite** | Stockage local des données sur chaque Raspberry Pi. |
+| **PostgreSQL** | Récupère les données des différentes BDD SQLite. |
 
-**Principe clé :** le pointage s’écrit **d’abord en local** sur le Raspberry Pi. Le serveur est la source de vérité **après synchronisation**.
+### Communications entre les différents composants
+- Connexion entre le Raspberry Pi et le lecteur RFID RC522 :
 
-```text
-┌─────────────────────────────┐
-│        SALLE DE COURS       │
-│  Carte NFC → Capteur NFC    │
-│           ↓                 │
-│      Raspberry Pi           │
-│      (agent + SQLite)       │
-└──────────────┬──────────────┘
-               │ HTTPS (si réseau OK)
-               ▼
-┌─────────────────────────────┐
-│       SERVEUR CENTRAL       │
-│  API REST + PostgreSQL      │
-│           ↓                 │
-│     Interface web           │
-└─────────────────────────────┘
-```
+| RC522 | Raspberry Pi 4B | Rôle |
+|:------|:----------------|:-----|
+| 3.3V | Pin 1 (3.3V) | Alimentation |
+| RST | Pin 22 (GPIO25) | Réinitialisation |
+| GND | Pin 6 (GND) | Masse |
+| MISO | Pin 21 (GPIO9) | Données du RC522 vers le Raspberry Pi |
+| MOSI | Pin 19 (GPIO10) | Données du Raspberry Pi vers le RC522 |
+| SCK | Pin 23 (GPIO11) | Horloge SPI |
+| SDA | Pin 24 (GPIO8 / CE0) | Sélection du lecteur |
 
----
+- Synchronisation entre SQLite et PostgreSQL via Python.
+- Utilisation de PHP pour faire le lien entre l'interface web et la BDD PostgreSQL.
 
-## 3. Composants détaillés
 
-### 3.1 Agent de pointage (Raspberry Pi)
+### Stratégie de synchronisation
 
-Logiciel exécuté sur le Pi. Il doit :
+| Élément | Description |
+|:---|:---|
+| **Stockage local SQLite** | puis synchronisation des données vers la base de données centralisée PostgreSQL. |
+| **Données non synchronisées** | Les données non synchronisées sont conservées dans SQLite jusqu'à ce qu'elles puissent être envoyées au serveur. |
 
-1. détecter une carte NFC et récupérer son identifiant (≤ 64 caractères) ;
-2. identifier l’étudiant via un cache local ;
-3. enregistrer le pointage localement avec date/heure ;
-4. afficher un retour immédiat (OK / carte inconnue / erreur) ;
-5. synchroniser automatiquement dès que le réseau est disponible.
 
-Organisation logicielle prévue :
+### Gestion des pertes de connexion lors des phases de pointage
 
-```text
-agent-pointage/
-├── reader/        # lecture NFC
-├── local_store/   # SQLite (file d’attente + cache)
-├── session/       # config séance (groupe, enseignement, salle)
-├── sync/          # envoi/réception vers le serveur
-├── ui/            # feedback (écran / LED / message)
-└── main.py        # démarrage de l’application
-```
+| Situation | Fonctionnement |
+|:---|:---|
+| **Perte de connexion** | En cas de perte de connexion avec le serveur central, le pointage continue normalement grâce au stockage local dans SQLite. |
+| **Connexion rétablie** | Une fois la connexion rétablie, les données enregistrées localement sont synchronisées avec PostgreSQL. |
 
-### 3.2 Serveur central
 
-Expose une API REST pour :
+### Gestion des erreurs
 
-- recevoir les pointages en lot (sync) ;
-- fournir le cache étudiants/cartes au dispositif ;
-- gérer le CRUD étudiants / groupes ;
-- filtrer et consulter les pointages.
+| Élément | Description |
+|:---|:---|
+| **Gestion des erreurs** | Liste à incrémenter dans le temps |
 
-### 3.3 Base de données centrale
 
-Stockage unique et partagé par tous les dispositifs et l’interface web.
+### Choix technologiques
 
-### 3.4 Interface web
+| Technologie | Utilisation et justification |
+|:---|:---|
+| **Python** | Utilisation de **Python** sur le Raspberry Pi : Python est adapté au projet car il permet de gérer facilement le lecteur RFID, les bases de données et la synchronisation avec le serveur central. Il dispose également de nombreuses bibliothèques compatibles avec le Raspberry Pi. |
+| **SQLite** | Utilisation de **SQLite** pour le stockage local : SQLite est adapté au Raspberry Pi car il fonctionne sans serveur de base de données et stocke les données directement dans un fichier. Il est donc léger et suffisant pour enregistrer les pointages localement, notamment lorsque la connexion au serveur central est indisponible. |
+| **PostgreSQL** | Utilisation de **PostgreSQL** pour la base de données centralisée : PostgreSQL est adapté à une base centralisée car il permet de gérer plusieurs Raspberry Pi et un volume important de données. Il offre également une bonne gestion des relations entre les différentes tables. |
+| **PHP** | Utilisation de **PHP** pour l'interface web : PHP permet de créer une interface web capable de communiquer directement avec PostgreSQL. C'est également un langage robuste et fiable, adapté au développement d'applications web. |
 
-Interface simple pour :
 
-- créer/modifier un étudiant ;
-- associer une carte NFC sans saisie manuelle de l’UID ;
-- gérer les groupes ;
-- consulter et filtrer les pointages.
+-- --
+# Annexes
 
-> Priorité du projet : communication **dispositif ↔ base de données** (offline + sync). L’interface peut rester simple au début.
+## Schéma Architecture utilises
+![Schema Architecture](img/Schema_Architecture.png)
 
----
+## Schema de câblage Raspberry <-> lecteur RFID
+![Raspberry_circuit](img/Raspberry_circuit.png)
 
-## 4. Modèle de données
-
-### 4.1 Entités principales
-
-| Entité | Contenu principal | Contrainte sujet |
-|--------|-------------------|------------------|
-| Étudiant | `num_etu`, nom, prénom, groupe, `uid_nfc` | `uid_nfc` ≤ 64 caractères |
-| Séance | `id_seance`, `id_ens`, groupe, salle, date, heure_debut, heure_fin | créneau d’emploi du temps |
-| Enseignement | `id_ens` / code | ≤ 32 caractères (ex. `R1.01`) |
-| Salle | `num_salle` | ≤ 32 caractères |
-| Dispositif | `device_id`, nom | un Pi = un `device_id` |
-| Pointage | `id_pointage`, `num_etu`, `id_seance`, date, heure | événement unique (UUID) |
-
-> L’emploi du temps est modélisé par l’entité **Séance** : une matière (`R1.01`) peut correspondre à plusieurs séances (dates/horaires différents).
-
-### 4.2 Schéma relationnel (simplifié)
-
-```text
-ETUDIANT 1 ─── N POINTAGE N ─── 1 SEANCE
-SEANCE N ─── 1 ENSEIGNEMENT
-SEANCE N ─── 1 SALLE
-DISPOSITIF 1 ─── N POINTAGE
-
-4.3 Stockage local (Raspberry Pi — SQLite)
-Tables locales (“MCD lite”) :
-
-Etudiants_cache : copie pour identifier un badge hors ligne (num_etu, nom, prénom, groupe, uid_nfc)
-seances_cache : séances téléchargées (id_seance, id_ens, groupe, salle, date, horaires)
-pointage_Locale : file d’attente des pointages (id_pointage, num_etu, id_seance, date, heure, synchronise)
-Chaque pointage local possède un UUID (id_pointage) généré sur le Pi.
-Cet identifiant sert côté serveur à éviter les doublons à la synchronisation.
----
-
-## 5. Communications
-
-| Lien | Protocole | Usage |
-|------|-----------|--------|
-| Pi → serveur | HTTPS + API REST | push des pointages, pull du cache étudiants |
-| Interface → serveur | HTTPS + API REST | gestion et consultation |
-| Auth dispositif | token lié au `device_id` | éviter les écritures anonymes |
-
-Endpoints prévus :
-
-- `POST /api/sync/pointages` — envoi d’un lot de pointages (idempotent sur UUID)
-- `GET /api/sync/etudiants` — récupération/mise à jour du cache
-- `POST /api/etudiants/...` — association carte ↔ étudiant (enrollment)
-- `GET /api/pointages?...` — consultation filtrée
-
----
-
-## 6. Fonctionnement hors connexion et synchronisation
-
-### 6.1 Pointage hors ligne
-
-1. L’étudiant présente sa carte.
-2. Le Pi lit l’UID.
-3. Le pointage est écrit en SQLite avec `synced = 0`.
-4. Un feedback est affiché immédiatement.
-5. Aucune dépendance au serveur à cet instant.
-
-### 6.2 Synchronisation au retour du réseau
-
-1. L’agent détecte que le serveur est joignable.
-2. Il envoie les pointages non synchronisés (batch).
-3. Le serveur enregistre chaque UUID (ignore si déjà présent).
-4. Le Pi marque `synced = 1` uniquement pour les UUID confirmés.
-5. En cas d’échec, les données restent en local et seront renvoyées plus tard.
-
-### 6.3 Cas couverts
-
-- interruption de connexion pendant le cours ;
-- redémarrage du Raspberry Pi ;
-- synchronisation interrompue ;
-- erreurs de transmission ;
-- doublons (grâce à l’UUID) ;
-- plusieurs dispositifs simultanés (chacun avec son `device_id`).
-
----
-
-## 7. Démarrage du dispositif
-
-Après mise sous tension, l’agent démarre automatiquement (service système).
-
-Avant la séance, l’enseignant sélectionne :
-
-- le **groupe** ;
-- l’**enseignement** ;
-- la **salle**.
-
-Ces informations sont attachées à chaque pointage local, même hors ligne.
-
-Objectif : mise en service rapide, sans manipulation technique complexe.
-
----
-
-## 8. Gestion des erreurs
-
-| Situation | Comportement |
-|-----------|--------------|
-| Carte inconnue | Feedback “inconnu”, pas de faux rattachement étudiant |
-| Erreur de lecture NFC | Feedback erreur, aucune écriture |
-| Serveur inaccessible | Continuer en local, file d’attente |
-| Sync partielle | ACK par UUID ; seul le confirmé passe à `synced = 1` |
-| Coupure d’alimentation | Écriture SQLite à chaque pointage pour limiter les pertes |
-
----
-
-## 9. Choix technologiques (proposés)
-
-| Couche | Technologie | Justification |
-|--------|-------------|----------------|
-| Agent Pi | Python | Écosystème adapté au Raspberry Pi et aux capteurs NFC |
-| Stockage local | SQLite | Léger, sans serveur local, robuste hors ligne |
-| API serveur | FastAPI (ou Flask) | API REST claire, adaptée à la sync par lots |
-| BDD centrale | PostgreSQL | Multi-clients, contraintes, filtres de consultation |
-| Interface | Web simple (HTML/JS ou framework léger) | Suffisante pour la gestion ; priorité au pointage |
-| Transport | HTTPS | Intégrité et confidentialité des échanges |
-
-Ces choix pourront être ajustés après validation par l’enseignant, tant que l’architecture (local-first + sync idempotente) est conservée.
-
----
-
-## 10. Branchement matériel (prévu)
-
-Matériel imposé : Raspberry Pi, capteur NFC, kit de prototypage.
-
-```text
-Carte étudiante
-      │ (NFC)
-      ▼
- Capteur NFC ──(GPIO / USB / SPI)──► Raspberry Pi
-                                         │
-                                   SQLite locale
-                                         │ (réseau)
-                                         ▼
-                                 Serveur + PostgreSQL
-                                         │
-                                   Interface web
-```
-
-> Le schéma de câblage précis (broches) sera complété après réception et identification exacte du module NFC fourni.
-
----
-
-## 11. Points d’attention pour la suite
-
-Avant de commencer le code complet :
-
-- [ ] validation orale de cette architecture par l’enseignant ;
-- [ ] réception du matériel ;
-- [ ] précision du protocole du capteur NFC fourni ;
-- [ ] implémentation prioritaire : pointage local → sync → multi-dispositifs → interface.
-
----
-
-## 12. Synthèse
-
-Cette architecture répond aux exigences du sujet en séparant clairement :
-
-1. **capture rapide** côté dispositif ;
-2. **résilience hors ligne** via SQLite ;
-3. **centralisation** via API + PostgreSQL ;
-4. **consultation** via une interface web simple.
-
-La priorité est donnée à la fiabilité du couple **pointage local + synchronisation**, conformément aux critères d’évaluation de la SAE.
