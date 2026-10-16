@@ -1,6 +1,6 @@
 # Pointage RFID — base SQLite locale (Raspberry Pi)
 
-Prototype SAE5.B.01 pour **Quentin** (matériel RC522) et **Zinab**.
+Prototype SAE5.B.01 
 
 La borne enregistre les badges **en local** (SQLite), même sans Internet.
 L’EDT ADE est déjà importé. Une carte inconnue crée une fiche `AUTO001` avec **l’UID lu sur la carte** (on ne fabrique pas l’UID).
